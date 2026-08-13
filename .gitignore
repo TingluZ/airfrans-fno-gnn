@@ -1,0 +1,26 @@
+
+data/Dataset/
+data/Dataset.zip
+data/cache/
+*.npz
+checkpoints/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+.claude/
+
+# packaging build artifacts
+*.egg-info/
+build/
+dist/
+
+# secrets / credentials
+id_rsa
+id_ecdsa
+id_ed25519
+*.pem
+*.key
+*.p12
+.env
+.env.*
+!.env.example
