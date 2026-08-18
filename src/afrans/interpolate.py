@@ -5,11 +5,11 @@ from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import Delaunay 
 
 
-def point_to_grid(values, tri, gx, gy):
+def point_to_grid(values, tri, gx, gy, fill_value=0.0):
     """pos: (N, 2), values: (N, C) → grid: (C, H, W)."""
 
     
-    interp = LinearNDInterpolator(tri, values, fill_value=0.0)
+    interp = LinearNDInterpolator(tri, values, fill_value=fill_value)
     result = interp(gx, gy)
 
     return np.moveaxis(result, 2, 0).astype(np.float32)
