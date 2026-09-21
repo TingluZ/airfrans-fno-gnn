@@ -29,7 +29,7 @@ class AirfRANSGridDataset(Dataset):
 
     def _build(self, sim, gx, gy):
 
-        pos = sim[:POS]
+        pos = sim[:,POS]
         tri = Delaunay(pos)
 
         x_norm = self.normaliser.transform_feature(sim[:, FEATURES])

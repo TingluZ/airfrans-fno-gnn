@@ -42,8 +42,8 @@ class GridConfig:
     Nothing that leaves the cached array unchanged belongs in here.
     """
 
-    grid_res_x: int = 128
-    grid_res_y: int = 64
+    grid_res_x: int = 256
+    grid_res_y: int = 128
     x_min: float = -2.0
     x_max: float = 4.0
     y_min: float = -1.5
@@ -100,7 +100,7 @@ class TrainConfig:
     invalidate a grid cache."""
 
     model: str = "fno"                # fno | geofno | gnn
-    n_modes: tuple = (16, 16)
+    n_modes: tuple = (32, 64)
     hidden_channels: int = 32
     n_layers: int = 4
 
@@ -110,15 +110,18 @@ class TrainConfig:
     epochs: int = 50
     grad_clip: float = 0.0            # 0 disables
 
-    val_frac: float = 0.1
     seed: int = 42
-    normalise_on: str = "grid"        # grid | points — record which regime a run used
+    normalise_on: str = "points"        # grid | points — record which regime a run used
     device: str = "auto"              # resolved to cuda/mps/cpu in engine.py
     num_workers: int = 0
 
-    @property
-    def run_name(self):
-        return f"{self.model}_h{self.hidden_channels}_lr{self.lr:g}_s{self.seed}"
+    def run_name(self, grid_cfg):
+        modes = "x".join(str(m) for m in self.n_modes)
+        return (f"{self.model}_h{self.hidden_channels}_m{modes}"
+                f"_lr{self.lr:g}_s{self.seed}_{grid_cfg.tag}")
 
     def to_dict(self):
         return asdict(self)
+
+    def __post_init__(self):
+            object.__setattr__(self, "n_modes", tuple(self.n_modes))

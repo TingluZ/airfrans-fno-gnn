@@ -1,5 +1,35 @@
 import numpy as np
 
+class RunningStats:
+    """
+    Mean/std over batches that never all exist at once
+
+    Sums are shifted by a constant before accumulating:
+    several AirfRANS columns (u_xin, u_yin) are constant within a 
+    simulation, and the naive E[x^2] - E[x]^2 form losses all precision
+    when std << |mean|
+    """
+
+    def __init__(self):
+        self.shift=None
+        self.n = 0
+
+    def update(self, a):
+        a = np.array(a, dtype=np.float64)
+        if self.shift is None:
+            self.shift = a.mean(axis=0)
+            self.s1 = np.zeros_like(self.shift)
+            self.s2 = np.zeros_like(self.shift)
+        d = a - self.shift
+        self.n += a.shape[0]
+        self.s1 += d.sum(axis=0)
+        self.s2 += (d*d).sum(axis=0)
+
+    def result(self):
+        mean = self.shift + self.s1 / self.n
+        var = (self.s2 - self.s1**2 / self.n) / self.n
+        return mean, np.sqrt(np.maximum(var, 0.0))
+
 class Normaliser:
 
     def __init__(self):
@@ -36,3 +66,7 @@ class Normaliser:
         d = np.load(path)
         self.feature_mean, self.feature_std = d["x_mean"], d["x_std"]
         self.target_mean, self.target_std = d["y_mean"], d["y_std"]
+
+    def fit_from_stats(self, f_mean, f_std, t_mean, t_std, eps=1e-8):
+        self.feature_mean, self.feature_std = f_mean, f_std + eps
+        self.target_mean, self.target_std = t_mean, t_std + eps
