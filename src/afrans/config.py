@@ -112,13 +112,15 @@ class TrainConfig:
 
     seed: int = 42
     normalise_on: str = "points"        # grid | points — record which regime a run used
+    loss_weighting: str = "none"        # none | density - record which training objective was used
     device: str = "auto"              # resolved to cuda/mps/cpu in engine.py
     num_workers: int = 0
 
     def run_name(self, grid_cfg):
         modes = "x".join(str(m) for m in self.n_modes)
+        tag = "" if self.loss_weighting == "none" else f"_{self.loss_weighting}"
         return (f"{self.model}_h{self.hidden_channels}_m{modes}"
-                f"_lr{self.lr:g}_s{self.seed}_{grid_cfg.tag}")
+                f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}")
 
     def to_dict(self):
         return asdict(self)
