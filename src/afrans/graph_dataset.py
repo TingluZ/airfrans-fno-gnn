@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from scipy.spatial import cKDTree
 from torch_geometric.data import Data
-from torch.geometric.utils import to_undirected
+from torch_geometric.utils import to_undirected
 
 import airfrans as af
 
@@ -29,17 +29,18 @@ def build_graph(name, normaliser, k=8):
     No edge_attr (relative position, distance) 
     """
     s = af.Simulation(root=str(DATA_ROOT), name=name)
-    inlet = (np.array([np.cos(s.angle_of_attack), np.sin(s.angle_of_attack)])) \
-             * s.inlet_velocity.reshape(1, 2) * np.ones_like(s.sdf)
+    inlet = (np.array([np.cos(s.angle_of_attack), np.sin(s.angle_of_attack)]) \
+             * s.inlet_velocity).reshape(1, 2) * np.ones_like(s.sdf)
 
     sim = np.concatenate([s.position, inlet, s.sdf, s.normals,
-                          s.velocity, s.pressue, s.nu_t, 
+                          s.velocity, s.pressure, s.nu_t, 
                           s.surface.reshape(-1, 1)], axis=-1)
 
     pos = sim[:, POS]
     N = pos.shape[0]
     tree = cKDTree(pos)
     _, idx = tree.query(pos, k=k+1)
+    idx = idx[:, 1:] # drop self -- column 0 of every row is always the point itself
 
     src = np.repeat(np.arange(N), k) # repeat points' index k times (k nearest neighbors)
     dst = idx.ravel() # flatten the index
@@ -50,7 +51,7 @@ def build_graph(name, normaliser, k=8):
     edge_index = to_undirected(edge_index) 
 
     x = normaliser.transform_feature(sim[:, FEATURES]).astype(np.float32)
-    y = normaliser.transform_feature(sim[:, TARGETS]).astype(np.float32)
+    y = normaliser.transform_target(sim[:, TARGETS]).astype(np.float32)
 
     return Data(
         x = torch.from_numpy(x),

@@ -58,6 +58,23 @@ def train_one_epoch(model, loader, opt, device, weight, grad_clip=0.0):
         n += x.size(0)
     return total / n
 
+def train_one_epoch_gnn(model, loader, opt, device, grad_clip=0.0):
+    model.train()
+    total, n = 0.0, 0
+    for batch in loader:
+        batch = batch.to(device)
+        opt.zero_grad()
+        out = model(batch.x, batch.edge_index)
+        loss = torch.nn.functional.mse_loss(out, batch.y)
+        loss.backward()
+        if grad_clip:
+            clip_grad_norm_(model.parameters(), grad_clip)
+        opt.step()
+        total += loss.item() * batch.num_graphs
+        n += batch.num_graphs
+
+    return total/n
+
 
 @torch.no_grad()
 def validate(model, loader, device, weight):
@@ -70,6 +87,17 @@ def validate(model, loader, device, weight):
         n += x.size(0)
     return total / n
 
+@torch.no_grad()
+def validate_gnn(model, loader, device):
+    model.eval()
+    total, n = 0.0, 0
+    for batch in loader:
+        batch = batch.to(device)
+        out = model(batch.x, batch.edge_index)
+        loss = torch.nn.functional.mse_loss(out, batch.y)
+        total += loss.item() * batch.num_graphs
+        n += batch.num_graphs
+    return total/n
 
 def checkpoint_path(train_cfg, grid_cfg):
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
@@ -106,6 +134,45 @@ def fit(model, train_loader, val_loader, train_cfg, grid_cfg, weight, verbose=Tr
                 "val_loss":val_loss,
                 "train_cfg":train_cfg.to_dict(),
                 "grid_cfg":grid_cfg.to_dict()
+            }, path)
+
+        if verbose:
+            dt = time.perf_counter() - t0
+            print(f"epoch {epoch:3d} train {train_loss:.5f} val {val_loss:.5f} "
+                  f"({dt:.1f}s) {'*' if val_loss == best_val else ''}")
+
+    return history, path
+
+def fit_gnn(model, train_loader, val_loader, train_cfg, verbose=True):
+    """
+    No grid_cfg and weight map, mirrors fit() structure otherwise.
+    """
+    device = resolve_device(train_cfg)
+    model.to(device)
+
+    opt = torch.optim.Adam(model.parameters(), lr=train_cfg.lr,
+                           weight_decay=train_cfg.weight_decay)
+    CKPT_DIR.mkdir(parents=True, exist_ok=True)
+    path = CKPT_DIR / f"{train_cfg.run_name()}.pt"
+
+    history = {"train":[], "val":[]}
+    best_val = float("inf")
+
+    for epoch in range(train_cfg.epochs):
+        t0 = time.perf_counter()
+        train_loss = train_one_epoch_gnn(model, train_loader, opt, device, train_cfg.grad_clip)
+        val_loss = validate_gnn(model, val_loader, device)
+        history["train"].append(train_loss)
+        history["val"].append(val_loss)
+
+        if val_loss < best_val:
+            best_val = val_loss
+            torch.save({
+                "model":model.state_dict(),
+                "optimizer": opt.state_dict(),
+                "epoch":epoch,
+                "val_loss": val_loss,
+                "train_cfg": train_cfg.to_dict()
             }, path)
 
         if verbose:

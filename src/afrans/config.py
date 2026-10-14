@@ -103,6 +103,7 @@ class TrainConfig:
     n_modes: tuple = (32, 64)
     hidden_channels: int = 32
     n_layers: int = 4
+    k_neighbors: int = 8
 
     lr: float = 1e-3
     weight_decay: float = 0.0
@@ -116,11 +117,13 @@ class TrainConfig:
     device: str = "auto"              # resolved to cuda/mps/cpu in engine.py
     num_workers: int = 0
 
-    def run_name(self, grid_cfg):
-        modes = "x".join(str(m) for m in self.n_modes)
-        tag = "" if self.loss_weighting == "none" else f"_{self.loss_weighting}"
-        return (f"{self.model}_h{self.hidden_channels}_m{modes}"
-                f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}")
+    def run_name(self, grid_cfg=None):
+        if self.model =='fno':
+            modes = "x".join(str(m) for m in self.n_modes)
+            tag = "" if self.loss_weighting == "none" else f"_{self.loss_weighting}"
+            return (f"{self.model}_h{self.hidden_channels}_m{modes}"
+                    f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}")
+        return f"{self.model}_h{self.hidden_channels}_l{self.n_layers}_k{self.k_neighbors}_lr{self.lr:g}_s{self.seed}"
 
     def to_dict(self):
         return asdict(self)
