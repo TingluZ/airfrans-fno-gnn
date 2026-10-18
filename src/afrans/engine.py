@@ -43,6 +43,14 @@ def weighted_mse(pred, target, weight):
     """
     return (((pred-target) ** 2) * weight).mean()
 
+def gnn_loss(out, batch, no_slip_weight=0.0):
+    mse = torch.nn.functional.mse_loss(out, batch.y)
+    if no_slip_weight:
+        no_slip = (out[batch.surface, 0:2] ** 2).mean()
+        return mse + no_slip_weight * no_slip
+    return mse
+
+
 def train_one_epoch(model, loader, opt, device, weight, grad_clip=0.0):
     model.train()
     total, n = 0.0, 0
@@ -58,14 +66,14 @@ def train_one_epoch(model, loader, opt, device, weight, grad_clip=0.0):
         n += x.size(0)
     return total / n
 
-def train_one_epoch_gnn(model, loader, opt, device, grad_clip=0.0):
+def train_one_epoch_gnn(model, loader, opt, device, grad_clip=0.0, no_slip_weight=0.0):
     model.train()
     total, n = 0.0, 0
     for batch in loader:
         batch = batch.to(device)
         opt.zero_grad()
         out = model(batch.x, batch.edge_index)
-        loss = torch.nn.functional.mse_loss(out, batch.y)
+        loss = gnn_loss(out, batch, no_slip_weight)
         loss.backward()
         if grad_clip:
             clip_grad_norm_(model.parameters(), grad_clip)
@@ -160,7 +168,7 @@ def fit_gnn(model, train_loader, val_loader, train_cfg, verbose=True):
 
     for epoch in range(train_cfg.epochs):
         t0 = time.perf_counter()
-        train_loss = train_one_epoch_gnn(model, train_loader, opt, device, train_cfg.grad_clip)
+        train_loss = train_one_epoch_gnn(model, train_loader, opt, device, train_cfg.grad_clip, train_cfg.no_slip_weight)
         val_loss = validate_gnn(model, val_loader, device)
         history["train"].append(train_loss)
         history["val"].append(val_loss)

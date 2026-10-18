@@ -62,6 +62,18 @@ def test_run_name_fno_branch_encodes_resolution_and_weighting():
     assert plain.run_name(grid_a) != weighted.run_name(grid_a)
 
 
+def test_tag_prevents_smoke_run_colliding_with_real_checkpoint():
+    """A real GNN checkpoint was once silently overwritten by a throwaway
+    --limit smoke test, because the two runs shared identical
+    "real" hyperparameters and run_name had nothing to tell them apart.
+    tag exists specifically to give a throwaway run a distinct filename."""
+    real_run = TrainConfig(model="gnn")
+    smoke_run = TrainConfig(model="gnn", tag="smoke")
+
+    assert real_run.run_name() != smoke_run.run_name()
+    assert "smoke" in smoke_run.run_name()
+
+
 def test_run_name_gnn_branch_needs_no_grid_config():
     """The GNN never touches a grid -- run_name() must work with no
     grid_cfg argument at all, and the name must reflect GNN-specific

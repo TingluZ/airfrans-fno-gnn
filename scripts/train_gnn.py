@@ -23,7 +23,13 @@ def main():
     p.add_argument("--num-workers", type=int,
                    help="worker processes to prefetch/build graphs in parallel with training")
     p.add_argument("--seed", type=int)
+    p.add_argument("--no-slip-weight", type=float)
+    p.add_argument("--tag", help="checkpoint filename suffix, e.g. 'ns_sweep_1'. "
+                   "Defaults to 'smoke' whenever --limit is used, so a throwaway "
+                   "run can never silently collide with a real checkpoint's filename.")
     args = p.parse_args()
+
+    tag = args.tag if args.tag is not None else ("smoke" if args.limit else "")
 
     overrides = {
         "epochs":args.epochs,
@@ -34,10 +40,11 @@ def main():
         "k_neighbors": args.k,
         "num_workers": args.num_workers,
         "seed": args.seed,
+        "no_slip_weight": args.no_slip_weight
     }
 
     train_cfg = TrainConfig(**{k: v for k, v in overrides.items() if v is not None},
-                            model="gnn", device="cpu")
+                            model="gnn", device="cpu", tag=tag)
     torch.manual_seed(train_cfg.seed)
 
     norm =Normaliser()

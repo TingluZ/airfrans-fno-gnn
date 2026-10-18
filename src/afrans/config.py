@@ -116,14 +116,18 @@ class TrainConfig:
     loss_weighting: str = "none"        # none | density - record which training objective was used
     device: str = "auto"              # resolved to cuda/mps/cpu in engine.py
     num_workers: int = 0
+    no_slip_weight: float = 0.0
+    tag: str = ""                      # e.g. "smoke" -- throwaway/debug runs, folded into run_name
 
     def run_name(self, grid_cfg=None):
+        extra = f"_{self.tag}" if self.tag else ""
         if self.model =='fno':
             modes = "x".join(str(m) for m in self.n_modes)
             tag = "" if self.loss_weighting == "none" else f"_{self.loss_weighting}"
             return (f"{self.model}_h{self.hidden_channels}_m{modes}"
-                    f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}")
-        return f"{self.model}_h{self.hidden_channels}_l{self.n_layers}_k{self.k_neighbors}_lr{self.lr:g}_s{self.seed}"
+                    f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}{extra}")
+        ns_tag = "" if self.no_slip_weight == 0 else f"_ns{self.no_slip_weight:g}"
+        return f"{self.model}_h{self.hidden_channels}_l{self.n_layers}_k{self.k_neighbors}_lr{self.lr:g}_s{self.seed}{ns_tag}{extra}"
 
     def to_dict(self):
         return asdict(self)
