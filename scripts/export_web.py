@@ -9,9 +9,9 @@ writes a compact, static dataset a browser can load one case at a time:
     <out>/cases/<i>.bin       one simulation: positions + truth/FNO/GNN fields
 
 Each case is cropped to a window around the airfoil and downsampled: every
-surface point is kept, the rest are sampled half in proportion to mesh density
-(so the boundary layer stays resolved) and half in proportion to local cell
-area (so the far field isn't empty).
+surface point is kept, the rest are sampled a third each in proportion to mesh
+density, to local cell area (so the far field isn't empty), and uniformly near
+the wall (so the outer boundary layer stays resolved).
 
     python scripts/export_web.py --out ../tinglu-portfolio/public/data/airfrans
     python scripts/export_web.py --out /tmp/airfrans-web --limit 3     # smoke test

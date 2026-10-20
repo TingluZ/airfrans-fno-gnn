@@ -58,3 +58,14 @@ def test_encode_layout_and_scaling():
     # every value is (k+1) after dividing by its channel scale
     for k in range(len(SOURCES)):
         assert np.allclose(f[k], k + 1)
+
+
+def test_sample_fills_the_near_wall_band():
+    pos, surf = _cloud(n=20000)
+    idx = sample_points(pos, surf, 1200, np.random.default_rng(0))
+    rest = idx[surf.sum():]
+    from scipy.spatial import cKDTree
+    wall, _ = cKDTree(pos[surf]).query(pos[rest])
+    all_wall, _ = cKDTree(pos[surf]).query(pos[~surf])
+    # the band holds a small share of the domain but gets about a third of the samples
+    assert (wall < 0.05).mean() > 2 * (all_wall < 0.05).mean()
