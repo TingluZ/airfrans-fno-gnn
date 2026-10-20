@@ -3,6 +3,10 @@
 Comparing a Fourier Neural Operator against a mesh-based graph neural network
 as surrogate models for steady-state RANS airfoil aerodynamics.
 
+**[Explore the results interactively →](https://tingluz.github.io/tinglu-portfolio/projects/airfrans-fno-gnn/)**
+Compare CFD, FNO and GNN predictions on any of the 200 test airfoils, zoom into the
+boundary layer, and see per-case errors, on [my portfolio site](https://tingluz.github.io/tinglu-portfolio/).
+
 ## Problem statement
 
 The traditional way of quantifiying flow field is computational simulation. During my Master's, I used Ansys Fluent to simulate building environment, airplane cabin, human respiration, etc. Sometimes the model could have millions of meshes, and the whole simulation might take several days. If I wanted to change any parameter or boundary condition, I needed to go through the time-consuming process again. The computational simulation is important as it is based on real Physics, however, when we have enough data from the simulations, we could leverage the strength of data driven models. Once those models are trained, it takes much less time to do a new prediction with new inputs.This project is aiming to predict pressure and velocity fields around an airfoil directly from
@@ -178,6 +182,9 @@ jupyter notebook comparison.ipynb
 # final numbers on the true held-out test set (run once)
 jupyter notebook run_testset.ipynb
 
+# export test-set predictions for the web explorer on the portfolio site
+python scripts/export_web.py --out ../tinglu-portfolio/public/data/airfrans
+
 # run the test suite
 pytest tests/
 ```
@@ -196,6 +203,7 @@ airfrans-fno-gnn/
 │   ├── normalise.py         # Normaliser + streaming RunningStats
 │   ├── metrics.py           # point-space relative L2
 │   ├── engine.py            # train/val loops, checkpointing, both models
+│   ├── web_export.py        # cropping, sampling and binary encoding for the web explorer
 │   └── models/
 │       ├── fno.py
 │       └── gnn.py
@@ -204,7 +212,8 @@ airfrans-fno-gnn/
 │   ├── train.py             # train the FNO
 │   ├── train_gnn.py         # train the GNN
 │   ├── evaluate.py          # FNO point-space evaluation
-│   └── evaluate_gnn.py      # GNN point-space evaluation
+│   ├── evaluate_gnn.py      # GNN point-space evaluation
+│   └── export_web.py        # test-set predictions -> static files for the portfolio explorer
 ├── tests/                   # pytest -- covers several real bugs found during development
 ├── initial_investigation.ipynb   # first dataset exploration
 ├── fno_investigation.ipynb       # diagnosing the FNO's training-objective mismatch
