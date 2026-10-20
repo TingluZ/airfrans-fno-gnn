@@ -31,32 +31,65 @@ def in_box(pos, box=BOX):
     return (pos[:, 0] >= x0) & (pos[:, 0] <= x1) & (pos[:, 1] >= y0) & (pos[:, 1] <= y1)
 
 
-def sample_points(pos, surf, n_points, rng, box=BOX, k=6, band=0.05):
+def wall_layers(pos, surf, wall_dist, stride=4, levels=12, d_min=2e-4, band=0.04, box=BOX):
     """
-    Indices to keep: all surface points in the box, plus n_points total
-    sampled from the rest, a third each by mesh density, by local cell area,
-    and uniformly within `band` chords of the wall
+    Indices of points arranged in layers along the wall: for every `stride`-th
+    surface point (a station) and each of `levels` wall distances spaced
+    geometrically from d_min to band, the mesh point nearest the station's
+    normal line within that distance bin
 
-    Mesh density alone puts most samples in the first few cell layers, leaving
-    the outer boundary layer sparse; the band stratum fills it so velocity
-    gradients near the wall aren't drawn as long slivers.
+    The boundary layer is far thinner than random samples are spaced, so
+    random points near the wall land some inside it and some outside and the
+    browser's triangulation draws spikes. Layers that follow the wall keep
+    each wall distance together, so the boundary layer renders as smooth bands.
+    """
+    s_idx = np.flatnonzero(surf & in_box(pos, box))
+    cand = np.flatnonzero(~surf & in_box(pos, box) & (wall_dist < band))
+    if not len(s_idx) or not len(cand):
+        return np.array([], dtype=int)
+    # order the surface around the airfoil (chord along x in [0, 1]) and keep every stride-th
+    ang = np.arctan2(pos[s_idx, 1], pos[s_idx, 0] - 0.5)
+    stations = s_idx[np.argsort(ang)][::stride]
+
+    dist, j = cKDTree(pos[stations]).query(pos[cand])
+    d = np.maximum(wall_dist[cand], 1e-12)
+    lateral = np.sqrt(np.maximum(dist ** 2 - d ** 2, 0))
+    edges = np.geomspace(d_min, band, levels + 1)
+    k = np.searchsorted(edges, d) - 1
+    ok = (k >= 0) & (k < levels)
+    cand, j, k, lateral = cand[ok], j[ok], k[ok], lateral[ok]
+
+    # per (station, level) bin, the candidate closest to the normal line
+    order = np.lexsort((lateral, k, j))
+    cell = j[order] * levels + k[order]
+    first = np.r_[True, cell[1:] != cell[:-1]]
+    return np.sort(cand[order][first])
+
+
+def sample_points(pos, surf, n_points, rng, wall_dist=None, box=BOX, k=6, band=0.04):
+    """
+    Indices to keep: all surface points in the box first, then (given
+    wall_dist) the wall layers from wall_layers(), then the rest of the
+    n_points budget sampled away from the wall, half by mesh density and
+    half by local cell area (so the far field isn't empty)
     """
     keep_surf = np.flatnonzero(surf & in_box(pos, box))
-    cand = np.flatnonzero(~surf & in_box(pos, box))
-    n_rest = max(n_points - len(keep_surf), 0)
+    away = ~surf & in_box(pos, box)
+    layers = np.array([], dtype=int)
+    if wall_dist is not None:
+        layers = wall_layers(pos, surf, wall_dist, band=band, box=box)
+        away &= wall_dist >= band
+    cand = np.flatnonzero(away)
+    n_rest = max(n_points - len(keep_surf) - len(layers), 0)
     if n_rest >= len(cand):
-        return np.concatenate([keep_surf, cand])
+        return np.concatenate([keep_surf, layers, cand])
 
     # distance to the k-th neighbour ~ local cell size; squared ~ cell area
     d, _ = cKDTree(pos[cand]).query(pos[cand], k=k + 1)
     area = d[:, -1] ** 2
-    near = np.zeros(len(cand))
-    if len(keep_surf):
-        wall, _ = cKDTree(pos[keep_surf]).query(pos[cand])
-        near = (wall < band).astype(float)
-    p = 1 / len(cand) + area / area.sum() + (near / near.sum() if near.any() else 1 / len(cand))
+    p = 1 / len(cand) + area / area.sum()
     picked = rng.choice(cand, size=n_rest, replace=False, p=p / p.sum())
-    return np.concatenate([keep_surf, np.sort(picked)])
+    return np.concatenate([keep_surf, layers, np.sort(picked)])
 
 
 def quantise_pos(pos, box=BOX):
