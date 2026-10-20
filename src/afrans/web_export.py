@@ -31,10 +31,15 @@ def in_box(pos, box=BOX):
     return (pos[:, 0] >= x0) & (pos[:, 0] <= x1) & (pos[:, 1] >= y0) & (pos[:, 1] <= y1)
 
 
-def sample_points(pos, surf, n_points, rng, box=BOX, k=6):
+def sample_points(pos, surf, n_points, rng, box=BOX, k=6, band=0.05):
     """
     Indices to keep: all surface points in the box, plus n_points total
-    sampled from the rest, half by mesh density and half by local cell area
+    sampled from the rest, a third each by mesh density, by local cell area,
+    and uniformly within `band` chords of the wall
+
+    Mesh density alone puts most samples in the first few cell layers, leaving
+    the outer boundary layer sparse; the band stratum fills it so velocity
+    gradients near the wall aren't drawn as long slivers.
     """
     keep_surf = np.flatnonzero(surf & in_box(pos, box))
     cand = np.flatnonzero(~surf & in_box(pos, box))
@@ -45,7 +50,11 @@ def sample_points(pos, surf, n_points, rng, box=BOX, k=6):
     # distance to the k-th neighbour ~ local cell size; squared ~ cell area
     d, _ = cKDTree(pos[cand]).query(pos[cand], k=k + 1)
     area = d[:, -1] ** 2
-    p = 0.5 / len(cand) + 0.5 * area / area.sum()
+    near = np.zeros(len(cand))
+    if len(keep_surf):
+        wall, _ = cKDTree(pos[keep_surf]).query(pos[cand])
+        near = (wall < band).astype(float)
+    p = 1 / len(cand) + area / area.sum() + (near / near.sum() if near.any() else 1 / len(cand))
     picked = rng.choice(cand, size=n_rest, replace=False, p=p / p.sum())
     return np.concatenate([keep_surf, np.sort(picked)])
 
