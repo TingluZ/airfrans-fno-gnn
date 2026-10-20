@@ -1,6 +1,6 @@
 import numpy as np
 
-from afrans.web_export import BOX, SOURCES, encode_case, quantise_pos, sample_points
+from afrans.web_export import BOX, SOURCES, encode_case, quantise_pos, sample_points, wall_layers
 
 
 def _cloud(n=5000, n_surf=200, seed=0):
@@ -60,12 +60,41 @@ def test_encode_layout_and_scaling():
         assert np.allclose(f[k], k + 1)
 
 
-def test_sample_fills_the_near_wall_band():
-    pos, surf = _cloud(n=20000)
-    idx = sample_points(pos, surf, 1200, np.random.default_rng(0))
-    rest = idx[surf.sum():]
+def _airfoil(n_wall=400, seed=0):
+    """Ellipse 'airfoil' on x in [0, 1] with a jittered, geometrically layered mesh around it."""
+    rng = np.random.default_rng(seed)
+    t = np.linspace(0, 2 * np.pi, n_wall, endpoint=False)
+    wall = np.c_[0.5 + 0.5 * np.cos(t), 0.06 * np.sin(t)]
+    normal = np.c_[0.06 * np.cos(t), 0.5 * np.sin(t)]
+    normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+    layers = np.geomspace(1e-5, 0.1, 60)
+    near = (wall[None] + layers[:, None, None] * normal[None]).reshape(-1, 2)
+    near += rng.normal(scale=1e-4, size=near.shape) * (layers.repeat(n_wall)[:, None] / 0.1)
+    far = rng.uniform([-0.6, -0.7], [2.2, 0.7], size=(20000, 2))
+    pos = np.concatenate([wall, near, far])
+    surf = np.zeros(len(pos), bool)
+    surf[:n_wall] = True
     from scipy.spatial import cKDTree
-    wall, _ = cKDTree(pos[surf]).query(pos[rest])
-    all_wall, _ = cKDTree(pos[surf]).query(pos[~surf])
-    # the band holds a small share of the domain but gets about a third of the samples
-    assert (wall < 0.05).mean() > 2 * (all_wall < 0.05).mean()
+    dense = np.c_[0.5 + 0.5 * np.cos(np.linspace(0, 2 * np.pi, 20000)), 0.06 * np.sin(np.linspace(0, 2 * np.pi, 20000))]
+    wall_dist, _ = cKDTree(dense).query(pos)
+    inside = ((pos[:, 0] - 0.5) / 0.5) ** 2 + (pos[:, 1] / 0.06) ** 2 < 1
+    keep = ~inside | surf
+    return pos[keep], surf[keep], wall_dist[keep]
+
+
+def test_wall_layers_fill_one_point_per_station_and_level():
+    pos, surf, wall_dist = _airfoil()
+    idx = wall_layers(pos, surf, wall_dist, stride=4, levels=12)
+    assert not surf[idx].any() and (wall_dist[idx] < 0.04).all()
+    # 100 stations x 12 levels, give or take empty bins
+    assert 0.9 * 1200 <= len(idx) <= 1200
+
+
+def test_sample_keeps_wall_layers_and_keeps_random_points_off_the_wall():
+    pos, surf, wall_dist = _airfoil()
+    idx = sample_points(pos, surf, 3000, np.random.default_rng(0), wall_dist=wall_dist)
+    layers = wall_layers(pos, surf, wall_dist)
+    n_surf = surf.sum()
+    assert len(idx) == 3000 and len(np.unique(idx)) == 3000
+    assert np.array_equal(idx[n_surf:n_surf + len(layers)], layers)
+    assert (wall_dist[idx[n_surf + len(layers):]] >= 0.04).all()
