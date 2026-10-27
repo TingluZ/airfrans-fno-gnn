@@ -19,7 +19,9 @@ def main():
     p.add_argument("--lr", type=float)
     p.add_argument("--hidden-channels", type=int)
     p.add_argument("--n-layers", type=int)
-    p.add_argument("--k", type=int, help="k in the k-NN graph")
+    p.add_argument("--graph", choices=["knn", "mesh"],
+                   help="knn (default): k nearest neighbours; mesh: the real CFD mesh connectivity")
+    p.add_argument("--k", type=int, help="k in the k-NN graph (ignored for --graph mesh)")
     p.add_argument("--num-workers", type=int,
                    help="worker processes to prefetch/build graphs in parallel with training")
     p.add_argument("--seed", type=int)
@@ -38,6 +40,7 @@ def main():
         "hidden_channels":args.hidden_channels,
         "n_layers": args.n_layers,
         "k_neighbors": args.k,
+        "graph": args.graph,
         "num_workers": args.num_workers,
         "seed": args.seed,
         "no_slip_weight": args.no_slip_weight
@@ -56,9 +59,9 @@ def main():
         train_names = train_names[:args.limit]
         val_names = val_names[:max(1, args.limit // 9)]
 
-    train_ds = AirfRANSGraphDataset(train_names, norm, k=train_cfg.k_neighbors)
-    val_ds = AirfRANSGraphDataset(val_names, norm, k=train_cfg.k_neighbors)
-    print(f"train {len(train_ds)} sims, val {len(val_ds)} sims, k={train_cfg.k_neighbors}")
+    train_ds = AirfRANSGraphDataset(train_names, norm, k=train_cfg.k_neighbors, graph=train_cfg.graph)
+    val_ds = AirfRANSGraphDataset(val_names, norm, k=train_cfg.k_neighbors, graph=train_cfg.graph)
+    print(f"train {len(train_ds)} sims, val {len(val_ds)} sims, graph={train_cfg.graph}")
 
     train_loader = DataLoader(train_ds, batch_size=train_cfg.batch_size, shuffle=True, num_workers = train_cfg.num_workers)
     val_loader = DataLoader(val_ds, batch_size = train_cfg.batch_size, shuffle=False, num_workers=train_cfg.num_workers)

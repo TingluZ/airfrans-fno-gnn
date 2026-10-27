@@ -83,3 +83,18 @@ def test_run_name_gnn_branch_needs_no_grid_config():
     assert "gnn" in name
     assert "k8" in name
     assert "l4" in name
+
+
+def test_gnn_baseline_checkpoint_name_is_pinned():
+    """The trained SAGEConv/k-NN baseline lives at this exact filename. Adding
+    new GNN options must not change the default name, or evaluate_gnn.py and
+    the notebooks would silently stop finding it."""
+    assert TrainConfig(model="gnn").run_name() == "gnn_h32_l4_k8_lr0.001_s42"
+
+
+def test_gnn_graph_type_gets_its_own_checkpoint_name():
+    knn = TrainConfig(model="gnn", graph="knn")
+    mesh = TrainConfig(model="gnn", graph="mesh")
+
+    assert knn.run_name() != mesh.run_name()
+    assert "mesh" in mesh.run_name()

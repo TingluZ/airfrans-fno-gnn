@@ -1,6 +1,6 @@
 # AirfRANS surrogate: FNO vs GNN
 
-Comparing a Fourier Neural Operator against a mesh-based graph neural network
+Comparing a Fourier Neural Operator against a graph neural network (GraphSAGE)
 as surrogate models for steady-state RANS airfoil aerodynamics.
 
 **[Explore the results interactively →](https://tingluz.github.io/tinglu-portfolio/projects/airfrans-fno-gnn/)**
@@ -29,9 +29,15 @@ https://arxiv.org/abs/2212.07564
 Fourier layers (spectral convolution in truncated Fourier space), then projects
 back to output channels.
 
-**GNN** — encode-process-decode architecture inspired by MeshGraphNet
-(Pfaff et al., ICLR 2021). Operates directly on the point cloud via a
-k-nearest-neighbour graph — no grid interpolation required.
+**GNN** — a 4-layer GraphSAGE stack (PyTorch Geometric `SAGEConv`, 32 hidden channels,
+~5k parameters) with one node per mesh point. In the
+results below, each node is connected to its 8 nearest neighbours (k-NN). Edges carry
+connectivity only, no edge features.
+
+The graph can alternatively be built from the real CFD mesh (`--graph mesh`): AirfRANS
+meshes are all-quadrilateral, so the edges are the four sides of every cell
+(~725k directed edges per simulation vs. ~1.65M for k-NN, and ~30% cheaper to train).
+Its results are in the graph ablation below.
 
 ## Results
 
@@ -42,7 +48,7 @@ All numbers below are from the AirfRANS test set.  Validation-set numbers were c
 | Model | Parameters | Training time (50 epochs) | Inference time (ms/sim) |
 |-------|-----------:|---------------------------:|-------------------------:|
 | FNO   | 4.34M      | ~35 min (MPS)              | ~1856 ms                 |
-| GNN   | 5k         | ~8.2 hrs (CPU)             | ~707 ms                  |
+| GNN (SAGE, k-NN) | 5k  | ~8.2 hrs (CPU)             | ~707 ms                  |
 
 FNO trains far faster but infers slower — its inference cost is dominated
 by Delaunay triangulation and grid interpolation over ~180k mesh points. 
@@ -58,11 +64,11 @@ but inference is cheaper: a smaller model plus a faster k-NN build.
 | pressure | 85.1%             | 56.7%             | 80.5%          | 53.7%          |
 | nu_t     | 61.1%             | 49.5%             | 53.6%          | 19.4%          |
 
+*(GNN = SAGEConv on the k-NN graph.)*
+
 GNN wins every channel, in both splits — especially at the surface
-(no-slip boundary), where FNO's fixed-resolution grid structurally cannot
-resolve the boundary layer (confirmed independently by a grid-resolution
-sweep showing the same floor before any model is even trained — see
-Discussion). Pressure is the hardest channel for both models; its error
+, where FNO's fixed-resolution grid structurally cannot
+resolve the boundary layer. Pressure is the hardest channel for both models; its error
 distribution is heavy-tailed (a handful of high-angle-of-attack
 simulations dominate the mean — see `comparison.ipynb`), not uniformly
 poor across the test set.
@@ -105,7 +111,25 @@ improved. A single shared weight map applied identically across all four output 
 can't selectively help one channel without affecting how the others are learned through the
 same underlying grid representation.
 
-Compared with FNO, GNN is directly based on the mesh points, there is no need for a point-grid-point transformation, so GNN wins mechanistically, and this can clearly be seen from the L2 error comparison. But GNN costs more than 10x on training time. Nonetheless, GNN also struggles on pressure prediction, correlated with angle of attack. The challenge is in physics, not model architecture.
+**Graph ablation (SAGE on k-NN vs. SAGE on the real mesh).** Same model, only the edges differ. Relative L2 error on the 80 validation simulations
+(mean over simulations):
+
+| Target   | all pts, k-NN | all pts, mesh | surface, k-NN | surface, mesh |
+|----------|--------------:|--------------:|--------------:|--------------:|
+| vx       | 22.4%         | 25.3%         | 18.8%         | 19.9%         |
+| vy       | 38.2%         | 43.1%         | 19.7%         | 17.7%         |
+| pressure | 58.8%         | 63.2%         | 60.7%         | 64.8%         |
+| nu_t     | 47.1%         | 50.1%         | 19.3%         | 13.3%         |
+
+Best validation loss was 0.274 (k-NN) vs. 0.294 (mesh). The real mesh is not better
+overall. It is 3 to 5 points worse on every all-points channel and on surface pressure,
+and better on surface `vy` and especially surface `nu_t`. Since the mesh graph has
+about 2.3x fewer edges and a degree of 4 rather than 8, one plausible reason is its
+smaller receptive field with only 4 layers, but I did not test that. These are single runs
+with one seed, and the per-simulation spread (e.g. +/-6% on `vx`) is comparable to several
+of the gaps, so only the larger ones (surface `nu_t`, all-points `vy`) should be read as signal.
+
+Compared with FNO, GNN's nodes are the mesh points themselves, there is no need for a point-grid-point transformation, so GNN wins mechanistically, and this can clearly be seen from the L2 error comparison. But GNN costs more than 10x on training time. Nonetheless, GNN also struggles on pressure prediction, correlated with angle of attack. The challenge is in physics, not model architecture.
 
 Therefore I also tried adding a physics constraint directly: a no-slip penalty on GNN
 training, penalising predicted velocity at surface nodes (which is exactly zero by the
@@ -128,9 +152,10 @@ penalty was not used in the final GNN for this reason.
 
 - **Single train/val/test split, no cross-validation.** All reported numbers are point
   estimates with no error bars or confidence intervals.
-- **GNN uses a k-NN graph (k=8), not the true mesh connectivity.** The actual AirfRANS
-  mesh triangulation (already computed for the FNO's interpolation step) carries real
-  physical adjacency information the k-NN graph only approximates.
+- **The headline GNN uses a k-NN graph (k=8), not the true mesh connectivity.** The
+  mesh-graph variant (`--graph mesh`) was trained and gave similar overall accuracy (see the
+  graph ablation), but with a single seed and no depth sweep, so the effect of the graph
+  choice is only roughly measured.
 - **No edge features.** The GNN uses bare connectivity only, no relative position or
   distance on edges.
 - **Limited hyperparameter search.** Grid resolution was chosen from a small, quick sweep
@@ -144,8 +169,10 @@ penalty was not used in the final GNN for this reason.
 
 - A geometry-aware FNO variant (GeoFNO, U-FNO) to close the grid-representation gap
   directly, rather than working around it with a density-weighted loss.
-- Rebuild the GNN's graph from the actual mesh triangulation instead of k-NN, and add
-  edge features (relative position, distance).
+- Add edge features (relative position, distance) and edge/node update blocks on the mesh
+  graph for a MeshGraphNet-faithful model, keeping the two SAGEConv models as baselines.
+  The mesh graph has a smaller receptive field than k-NN, so this likely needs more
+  message-passing blocks than the current 4.
 - Per-channel loss weighting, rather than one weight map/penalty shared identically across
   all four outputs, to avoid the cross-channel interference seen in both the density-weighted
   FNO (`vy` regression) and the no-slip penalty (negative result overall).
@@ -170,11 +197,12 @@ python scripts/build_cache.py
 
 # train both baselines
 python scripts/train.py          # FNO, ~35 min on MPS
-python scripts/train_gnn.py      # GNN, ~8 hrs on CPU
+python scripts/train_gnn.py      # GNN (SAGE on k-NN), ~8 hrs on CPU
+python scripts/train_gnn.py --graph mesh   # same model on the real mesh graph, ~3-4 hrs on CPU
 
 # evaluate against the held-out val split
 python scripts/evaluate.py
-python scripts/evaluate_gnn.py
+python scripts/evaluate_gnn.py             # add --graph mesh for the mesh variant
 
 # head-to-head comparison, training curves, qualitative plots
 jupyter notebook comparison.ipynb
@@ -199,7 +227,7 @@ airfrans-fno-gnn/
 │   ├── interpolate.py       # point <-> grid interpolation (FNO)
 │   ├── cache.py             # FNO grid cache + density-weight-map construction
 │   ├── grid_dataset.py      # FNO's Dataset (from_cache / from_dataset)
-│   ├── graph_dataset.py     # GNN's k-NN graph construction
+│   ├── graph_dataset.py     # GNN graph construction (k-NN or real mesh connectivity)
 │   ├── normalise.py         # Normaliser + streaming RunningStats
 │   ├── metrics.py           # point-space relative L2
 │   ├── engine.py            # train/val loops, checkpointing, both models

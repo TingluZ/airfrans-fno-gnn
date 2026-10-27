@@ -14,10 +14,13 @@ from afrans.splits import load_split, simulation_names
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    default_ckpt = CKPT_DIR / (TrainConfig(model="gnn").run_name() + ".pt")
-    p.add_argument("--checkpoint", default=str(default_ckpt))
+    p.add_argument("--graph", choices=["knn", "mesh"], default="knn",
+                   help="picks the default checkpoint and the results filename")
+    p.add_argument("--checkpoint", help="defaults to the GNN checkpoint for --graph")
     p.add_argument("--limit", type=int, help="check only the first N val sims, e.g. 20")
     args = p.parse_args()
+    if args.checkpoint is None:
+        args.checkpoint = str(CKPT_DIR / (TrainConfig(model="gnn", graph=args.graph).run_name() + ".pt"))
 
     ck = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     train_cfg = TrainConfig(**ck["train_cfg"])
@@ -34,11 +37,11 @@ def main():
     if args.limit:
         val_names = val_names[:args.limit]
     print(f"{args.checkpoint} (epoch {ck['epoch']}, val_loss {ck['val_loss']:.5f})")
-    print(f"evaluating on {len(val_names)} val simulations, k={train_cfg.k_neighbors}...")
+    print(f"evaluating on {len(val_names)} val simulations, graph={train_cfg.graph}...")
 
     all_errs, surf_errs = [], []
     for i, name in enumerate(val_names):
-        data = build_graph(name, norm, k=train_cfg.k_neighbors).to(device)
+        data = build_graph(name, norm, k=train_cfg.k_neighbors, graph=train_cfg.graph).to(device)
 
         with torch.no_grad():
             pred_norm = model(data.x, data.edge_index)
@@ -71,7 +74,8 @@ def main():
         print(f"{name:10s} {a['mean']:6.1%} ± {a['std']:5.1%}       "
               f"{s['mean']:6.1%} ± {s['std']:5.1%}")
 
-    out_path = REPO_ROOT / "results_gnn.json"
+    suffix = "" if train_cfg.graph == "knn" else f"_{train_cfg.graph}"
+    out_path = REPO_ROOT / f"results_gnn{suffix}.json"
     out_path.write_text(json.dumps(results, indent=2))
     print(f"\nwrote {out_path}")
 

@@ -103,7 +103,8 @@ class TrainConfig:
     n_modes: tuple = (32, 64)
     hidden_channels: int = 32
     n_layers: int = 4
-    k_neighbors: int = 8
+    k_neighbors: int = 8               # GNN only, used when graph == "knn"
+    graph: str = "knn"                 # GNN only: knn | mesh (real quad-mesh connectivity)
 
     lr: float = 1e-3
     weight_decay: float = 0.0
@@ -127,7 +128,8 @@ class TrainConfig:
             return (f"{self.model}_h{self.hidden_channels}_m{modes}"
                     f"_lr{self.lr:g}_s{self.seed}{tag}_{grid_cfg.tag}{extra}")
         ns_tag = "" if self.no_slip_weight == 0 else f"_ns{self.no_slip_weight:g}"
-        return f"{self.model}_h{self.hidden_channels}_l{self.n_layers}_k{self.k_neighbors}_lr{self.lr:g}_s{self.seed}{ns_tag}{extra}"
+        g = f"k{self.k_neighbors}" if self.graph == "knn" else self.graph
+        return f"{self.model}_h{self.hidden_channels}_l{self.n_layers}_{g}_lr{self.lr:g}_s{self.seed}{ns_tag}{extra}"
 
     def to_dict(self):
         return asdict(self)
