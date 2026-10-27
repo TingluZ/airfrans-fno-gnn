@@ -36,7 +36,7 @@ connectivity only, no edge features.
 
 The graph can alternatively be built from the real CFD mesh (`--graph mesh`): AirfRANS
 meshes are all-quadrilateral, so the edges are the four sides of every cell
-(~725k directed edges per simulation vs. ~1.65M for k-NN, and ~30% cheaper to train).
+(~725k directed edges per simulation vs. ~1.65M for k-NN, and about half the training time: ~3-4 h vs. ~8 h on CPU).
 Its results are in the graph ablation below.
 
 ## Results
