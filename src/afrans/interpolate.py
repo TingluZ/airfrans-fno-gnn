@@ -6,7 +6,7 @@ from scipy.spatial import Delaunay
 
 
 def point_to_grid(values, tri, gx, gy, fill_value=0.0):
-    """pos: (N, 2), values: (N, C) → grid: (C, H, W)."""
+    """values: (N, C) at the points triangulated by tri → grid: (C, H, W) at (gx, gy)."""
 
     
     interp = LinearNDInterpolator(tri, values, fill_value=fill_value)

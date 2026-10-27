@@ -5,7 +5,7 @@ Reads val simulations directly with af.Simulation rather than the grid cache:
 the cache holds no point data ( see cache.py) and 80 sims at ~0.2s each is ~16s in total
 
     python scripts/evaluate.py
-    python scripts/evaluate.py --checkpoint checkpoints/fno_..._64x128.pt --suffic _smoke
+    python scripts/evaluate.py --checkpoint checkpoints/fno_..._64x128.pt --suffix _smoke
 """
 
 import argparse
@@ -67,7 +67,8 @@ def predict_sim(model, normaliser, grid_cfg, device, sim):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    default_ckpt = CKPT_DIR / (TrainConfig().run_name(GridConfig()) + ".pt")
+    # train.py always trains with the density-weighted loss
+    default_ckpt = CKPT_DIR / (TrainConfig(loss_weighting="density").run_name(GridConfig()) + ".pt")
     p.add_argument("--checkpoint", default=str(default_ckpt))
     p.add_argument("--suffix", default="", help="normaliser suffix, e.g. _smoke")
     p.add_argument("--split", choices=["train", "val"], default="val")

@@ -1,6 +1,6 @@
 """
-Bare-connecttivity GNN baseline: 
-stacked PyG SAGECinv layers
+Bare-connectivity GNN baseline: 
+stacked PyG SAGEConv layers
 """
 
 import torch

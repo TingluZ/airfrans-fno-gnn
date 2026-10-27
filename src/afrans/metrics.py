@@ -1,5 +1,5 @@
 """
-Point-space error metrices -- physical unit
+Point-space error metrics -- physical units
 
 Grid space MSE ( what fit() trains on and reports)
 is training signal, not a comparable result:
@@ -16,14 +16,15 @@ def relative_l2(pred, target, mask=None, ref_norm=None, eps=1e-8):
     Ref defaults to ||target||_2 over the same points
     
     Standard neural-operator convention (Li et al., FNO): each simulation's
-    error is scaled by that simalation'sown norm, not a global one, and the
+    error is scaled by that simulation's own norm, not a global one, and the
     per-sim values are averaged afterward.
     If mask is given, both the error and the norm are computed over the masked
     subset only.  
 
     At surface, velocity and nu_t are exactly 0 by the no-slip condition.
     Pass a fixed ref_norm (e.g. the training normaliser's global std) to measure
-    error relative to the field's normal scale instead.
+    error relative to the field's normal scale instead. The evaluation scripts pass
+    target_std * sqrt(n_masked), which makes the result RMSE / target_std.
     """
 
     if mask is not None:
