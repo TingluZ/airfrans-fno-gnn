@@ -14,7 +14,7 @@ geometry + flow conditions, skipping the iterative CFD solve.
 
 ## Dataset
 
-This project use AirfRANS (Bonnet et al., 2022) dataset, a dataset for studying two-dimentional incompressible steady-state Reynolds-Averaged Navier-Stokes equations over airfoils at a sub-sonic regime and for different angles of attack. There are 800 samples for the training set and 200 samples for the test set. The features (inputs) are: x and y coordinate of mesh points, x and y component of inlet velocity, distance to airfoil and normal x, y component. The targets (outputs) are: x and component of velocity, pressure and turbulent viscosity.
+This project use AirfRANS (Bonnet et al., 2022) dataset, a dataset for studying two-dimentional incompressible steady-state Reynolds-Averaged Navier-Stokes equations over airfoils at a sub-sonic regime and for different angles of attack. There are 800 samples for the training set and 200 samples for the test set. The features (inputs) are: x and y coordinate of mesh points, x and y component of inlet velocity, distance to airfoil and normal x, y component. The targets (outputs) are: x and y component of velocity, pressure and turbulent viscosity.
 
 Source: 
 
@@ -55,7 +55,7 @@ by Delaunay triangulation and grid interpolation over ~180k mesh points.
 GNN's training is the expensive side as a k-NN graph is rebuilt every epoch, every simulation,
 but inference is cheaper: a smaller model plus a faster k-NN build.
 
-**Point-space relative L2 error, by target channel**
+**Point-space error, by target channel**
 
 | Target   | FNO (all points) | GNN (all points) | FNO (surface) | GNN (surface) |
 |----------|------------------:|------------------:|---------------:|---------------:|
@@ -64,9 +64,12 @@ but inference is cheaper: a smaller model plus a faster k-NN build.
 | pressure | 85.1%             | 56.7%             | 80.5%          | 53.7%          |
 | nu_t     | 61.1%             | 49.5%             | 53.6%          | 19.4%          |
 
-*(GNN = SAGEConv on the k-NN graph.)*
+*(GNN = SAGEConv on the k-NN graph. All-points columns are relative L2, ‖pred − true‖ / ‖true‖ per simulation,
+averaged over simulations. Surface columns are surface RMSE divided by the channel's training-set std
+(`ref_norm` in `metrics.relative_l2`): velocity and `nu_t` are exactly zero at the wall, so a relative L2
+there would divide by zero. The density-loss and graph-ablation tables below use the same two metrics.)*
 
-GNN wins every channel, in both splits — especially at the surface
+GNN wins every channel, both over all points and at the surface — especially at the surface
 , where FNO's fixed-resolution grid structurally cannot
 resolve the boundary layer. Pressure is the hardest channel for both models; its error
 distribution is heavy-tailed (a handful of high-angle-of-attack
@@ -87,7 +90,8 @@ the true fields through the grid and back:
 | 256×128   | 32.3%        | 13.0%                | 100.7%        | 34.3%                 |
 | 512×256   | 22.1%        | 10.2%                |  81.0%        | 30.2%                 |
 
-*(relative MAE / std, averaged over 3 training simulations)*
+*(relative MAE / std, averaged over 3 training simulations. This is a different metric from the result tables,
+so compare how it changes with resolution rather than its values against the model errors.)*
 
 256×128 was chosen because it's the point of diminishing returns: 128×64→256×128 roughly
 halves the error, but 256×128→512×256 costs 4× the disk space for a much smaller gain.
@@ -129,7 +133,7 @@ smaller receptive field with only 4 layers, but I did not test that. These are s
 with one seed, and the per-simulation spread (e.g. +/-6% on `vx`) is comparable to several
 of the gaps, so only the larger ones (surface `nu_t`, all-points `vy`) should be read as signal.
 
-Compared with FNO, GNN's nodes are the mesh points themselves, there is no need for a point-grid-point transformation, so GNN wins mechanistically, and this can clearly be seen from the L2 error comparison. But GNN costs more than 10x on training time. Nonetheless, GNN also struggles on pressure prediction, correlated with angle of attack. The challenge is in physics, not model architecture.
+Compared with FNO, GNN's nodes are the mesh points themselves, there is no need for a point-grid-point transformation, so GNN wins mechanistically, and this can clearly be seen from the L2 error comparison. But GNN took about 14x longer to train (8.2 h on CPU vs. 35 min on MPS, so not the same hardware). Nonetheless, GNN also struggles on pressure prediction, correlated with angle of attack. The challenge is in physics, not model architecture.
 
 Therefore I also tried adding a physics constraint directly: a no-slip penalty on GNN
 training, penalising predicted velocity at surface nodes (which is exactly zero by the

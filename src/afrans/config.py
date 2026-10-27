@@ -100,7 +100,7 @@ class TrainConfig:
     """Model and optimisation choices. Changing any of these does NOT
     invalidate a grid cache."""
 
-    model: str = "fno"                # fno | geofno | gnn
+    model: str = "fno"                # fno | gnn
     n_modes: tuple = (32, 64)
     hidden_channels: int = 32
     n_layers: int = 4

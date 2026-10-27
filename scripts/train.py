@@ -2,7 +2,7 @@
 Train a single model against a pre-built grid cache
 
 python scripts/train.py
-python scripts/train.py --epochs 2 --grid-res 64 128 --suffix _smoke
+python scripts/train.py --epochs 2 --grid-res 128 64 --suffix _smoke
 """
 
 import argparse

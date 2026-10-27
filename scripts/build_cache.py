@@ -37,7 +37,7 @@ def main():
     p.add_argument("--task", default="full")
     p.add_argument("--limit", type=int, default=None,
                    help="use only the first N train sims; writes to *_smoke paths")
-    p.add_argument("--grid_res", type=int, nargs=2, metavar=("NX", "NY"))
+    p.add_argument("--grid-res", "--grid_res", dest="grid_res", type=int, nargs=2, metavar=("NX", "NY"))
     p.add_argument("--overwrite", action="store_true")
     args = p.parse_args()
 
