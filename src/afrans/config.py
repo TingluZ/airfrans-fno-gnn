@@ -27,6 +27,7 @@ COLS = [
 POS = slice(0, 2)
 FEATURES = slice(0, 7)
 TARGETS = slice(7, 11)
+DISTANCE = 4
 SURFACE = 11
 
 N_FEATURES = FEATURES.stop - FEATURES.start   # 7

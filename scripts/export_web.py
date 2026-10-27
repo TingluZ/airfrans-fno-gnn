@@ -9,8 +9,9 @@ writes a compact, static dataset a browser can load one case at a time:
     <out>/cases/<i>.bin       one simulation: positions + truth/FNO/GNN fields
 
 Each case is cropped to a window around the airfoil and downsampled: every
-surface point is kept, the rest are sampled half in proportion to mesh density
-(so the boundary layer stays resolved) and half in proportion to local cell
+surface point is kept, points within 0.04 chords of the wall are kept in
+layers that follow it (so the boundary layer renders as smooth bands), and the
+rest are sampled half in proportion to mesh density and half to local cell
 area (so the far field isn't empty).
 
     python scripts/export_web.py --out ../tinglu-portfolio/public/data/airfrans
@@ -28,6 +29,7 @@ import numpy as np
 import torch
 
 from afrans.config import (CACHE_DIR, CKPT_DIR, POS, REPO_ROOT, SURFACE,
+                           DISTANCE,
                            TARGET_NAMES, TARGETS, GridConfig, TrainConfig)
 from afrans.graph_dataset import build_graph
 from afrans.metrics import relative_l2
@@ -86,7 +88,7 @@ def load_models():
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out", required=True, help="output folder, e.g. ../tinglu-portfolio/public/data/airfrans")
-    p.add_argument("--points", type=int, default=6000, help="points kept per case (surface included)")
+    p.add_argument("--points", type=int, default=7000, help="points kept per case (surface included)")
     p.add_argument("--limit", type=int, help="export only the first N test sims")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
@@ -123,7 +125,8 @@ def main():
             for m, y in (("fno", y_fno), ("gnn", y_gnn))
         }
 
-        idx = sample_points(pos, surf, args.points, np.random.default_rng(args.seed + i))
+        idx = sample_points(pos, surf, args.points, np.random.default_rng(args.seed + i),
+                            wall_dist=np.abs(sim[:, DISTANCE]))
         n_surf = int(surf[idx].sum())  # surface points come first in idx
         blob = encode_case(pos[idx], {"truth": y_true[idx], "fno": y_fno[idx], "gnn": y_gnn[idx]}, scale)
         (out / "cases" / f"{i}.bin").write_bytes(blob)
