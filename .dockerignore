@@ -1,0 +1,7 @@
+.git
+data
+checkpoints
+serving_artifacts
+*.ipynb
+**/__pycache__
+.pytest_cache

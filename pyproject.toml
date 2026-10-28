@@ -22,3 +22,5 @@ dev = ["pytest"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+[tool.pytest.ini_options]
+pythonpath = ["."]   # so tests can import the serve/ app from the repo root
