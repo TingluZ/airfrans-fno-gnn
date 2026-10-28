@@ -52,7 +52,9 @@ jobs:
           from huggingface_hub import HfApi
           api = HfApi(token=os.environ["HF_TOKEN"])
           space = os.environ["HF_SPACE"]
-          api.create_repo(space, repo_type="space", space_sdk="docker", exist_ok=True)
+          # a fine-grained token scoped to one existing Space can't create repos
+          if not api.repo_exists(space, repo_type="space"):
+              api.create_repo(space, repo_type="space", space_sdk="docker")
           api.upload_folder(repo_id=space, repo_type="space", folder_path="space",
                             commit_message=f"Deploy {os.environ['SHA'][:7]} from GitHub",
                             delete_patterns=["src/**", "serve/**"])
