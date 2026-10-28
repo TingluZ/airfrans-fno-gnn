@@ -11,7 +11,7 @@ Settings (environment variables):
     ARTIFACT_DIR     folder laid out as in afrans.serving (default: ./serving_artifacts)
     HF_MODEL_REPO    if ARTIFACT_DIR has no model.pt, download this Hugging Face repo into it
     ALLOWED_ORIGINS  comma-separated CORS origins (default: the portfolio site)
-    TORCH_THREADS    CPU threads for inference (default: 2, what a free Space has)
+    TORCH_THREADS    CPU threads for inference (default: 2; Cloud Run sets 1 to match its 1 vCPU)
 """
 
 import os

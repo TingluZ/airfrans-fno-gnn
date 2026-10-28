@@ -1,5 +1,5 @@
-# AirfRANS GNN API. Built by Hugging Face Spaces (Docker SDK) on every deploy,
-# and by CI for the smoke test. Run locally:
+# AirfRANS GNN API. Built by CI for the smoke test, and by deploy.yml for Cloud
+# Run (which adds the artifacts on top). Run locally:
 #   docker build -t airfrans-gnn .
 #   docker run -p 7860:7860 airfrans-gnn                  # downloads artifacts from the Hub
 #   docker run -p 7860:7860 -v $PWD/serving_artifacts:/home/user/artifacts airfrans-gnn
@@ -7,8 +7,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Spaces run the container as uid 1000; creating that user keeps file
-# ownership the same locally and on the Space
+# run as an unprivileged user, never root; uid 1000 matches most host
+# accounts, so files in mounted volumes keep sensible ownership
 RUN useradd -m -u 1000 user
 WORKDIR /home/user/app
 

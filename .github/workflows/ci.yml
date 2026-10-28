@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build the image the Space will run
+      - name: Build the image Cloud Run will run
         run: docker build -t airfrans-gnn .
       - name: Generate synthetic artifacts (the real ones live on the Hub)
         run: |

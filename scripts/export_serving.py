@@ -7,8 +7,8 @@ Run where the checkpoint, normaliser and AirfRANS dataset live (your Mac):
     python scripts/export_serving.py --out serving_artifacts --upload tingluzhang/airfrans-gnn
 
 --upload pushes the folder to a Hugging Face model repo with your local
-login (`hf auth login`), creating the repo if needed. The Space downloads it
-at startup. Case ids match the portfolio explorer's (position in the test set).
+login (`hf auth login`), creating the repo if needed. The deploy workflow bakes
+it into the Cloud Run image. Case ids match the portfolio explorer's (position in the test set).
 
 For each exported case it also re-runs the model through the serving path
 (float32 arrays, afrans.inference) and prints the relative L2 error next to
