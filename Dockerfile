@@ -3,7 +3,7 @@
 #   docker build -t airfrans-gnn .
 #   docker run -p 7860:7860 airfrans-gnn                  # downloads artifacts from the Hub
 #   docker run -p 7860:7860 -v $PWD/serving_artifacts:/home/user/artifacts airfrans-gnn
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 

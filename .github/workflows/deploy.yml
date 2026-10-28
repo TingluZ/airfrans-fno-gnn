@@ -34,7 +34,7 @@ jobs:
           ref: ${{ env.SHA }}
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: pip install huggingface_hub==2.3.0
       - name: Assemble the Space (only what the image needs)
         run: |
