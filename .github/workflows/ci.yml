@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: serve/requirements.txt
+      # CPU-only torch: the default wheel drags in ~2 GB of CUDA libraries
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
+      # airfrans only because cache.py imports it; tests never touch the dataset
+      - run: pip install -r serve/requirements.txt pytest httpx airfrans
+      - run: pip install --no-deps -e .
+      - run: pytest -q
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image Cloud Run will run
+        run: docker build -t airfrans-gnn .
+      - name: Generate synthetic artifacts (the real ones live on the Hub)
+        run: |
+          mkdir fixture
+          docker run --rm -u "$(id -u)" -v "$PWD/fixture:/out" airfrans-gnn \
+            python -c "from afrans.serving import make_fixture; make_fixture('/out')"
+          chmod -R a+rX fixture   # readable by the container's uid 1000
+      - name: Start the API and smoke-test it
+        run: |
+          docker run -d --name api -p 7860:7860 -e HF_MODEL_REPO= \
+            -v "$PWD/fixture:/home/user/artifacts" airfrans-gnn
+          for i in $(seq 1 30); do
+            curl -sf localhost:7860/health && break
+            sleep 2
+          done
+          curl -sf localhost:7860/health | tee /dev/stderr | grep -q '"status":"ok"'
+          curl -sf -X POST localhost:7860/predict -H 'Content-Type: application/json' \
+            -d '{"case_id": 0, "aoa_deg": 8, "n_points": 1000}' -o predict.json
+          python3 -c "import json; b = json.load(open('predict.json')); assert len(b['x']) > 0 and set(b['prediction']) == {'vx', 'vy', 'pressure', 'nu_t'}, b; print('predict ok:', len(b['x']), 'points in', b['inference_ms'], 'ms')"
+      - if: failure()
+        run: docker logs api

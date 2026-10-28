@@ -20,8 +20,6 @@ from scipy.spatial import cKDTree
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
 
-import airfrans as af
-
 from afrans.config import DATA_ROOT, FEATURES, POS, SURFACE, TARGETS
 
 VTK_QUAD = 9
@@ -64,6 +62,19 @@ def knn_edges(pos, k):
     return to_undirected(edge_index)
 
 
+def node_features(pos, sdf, normals, aoa, u_inf):
+    """
+    Raw (unnormalised) model inputs in COLS order, shape (N, 7).
+
+    aoa is in radians, as AirfRANS stores it. AirfRANS sets the angle of
+    attack through the inflow direction, not by rotating the airfoil, so the
+    same mesh with a different (aoa, u_inf) is a valid input.
+    """
+    sdf = np.asarray(sdf).reshape(-1, 1)
+    inlet = np.array([np.cos(aoa), np.sin(aoa)]) * u_inf * np.ones((len(sdf), 2))
+    return np.concatenate([pos, inlet, sdf, normals], axis=-1)
+
+
 def build_graph(name, normaliser, k=8, graph="knn"):
     """
     One simulation -> one PyG Data object, fully in normalised space.
@@ -71,11 +82,13 @@ def build_graph(name, normaliser, k=8, graph="knn"):
     Bare connectivity only: edge_index and nothing else on the edges
     (no edge_attr such as relative position or distance).
     """
-    s = af.Simulation(root=str(DATA_ROOT), name=name)
-    inlet = (np.array([np.cos(s.angle_of_attack), np.sin(s.angle_of_attack)]) \
-             * s.inlet_velocity).reshape(1, 2) * np.ones_like(s.sdf)
+    import airfrans as af  # only needed with the raw dataset, not for serving
 
-    sim = np.concatenate([s.position, inlet, s.sdf, s.normals,
+    s = af.Simulation(root=str(DATA_ROOT), name=name)
+    features = node_features(s.position, s.sdf, s.normals,
+                             s.angle_of_attack, s.inlet_velocity)
+
+    sim = np.concatenate([features,
                           s.velocity, s.pressure, s.nu_t,
                           s.surface.reshape(-1, 1)], axis=-1)
 

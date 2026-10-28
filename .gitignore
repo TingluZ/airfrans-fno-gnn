@@ -24,4 +24,4 @@ id_ed25519
 *.p12
 .env
 .env.*
-!.env.example
+!.env.exampleserving_artifacts/

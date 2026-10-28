@@ -1,0 +1,87 @@
+name: Deploy to Google Cloud Run
+
+# Runs after CI passes on main (never on pull requests), or by hand from the
+# Actions tab. Keyless auth: GitHub's OIDC token is exchanged for a short-lived
+# Google credential through Workload Identity Federation, so no JSON key is
+# stored anywhere. Needs these repository variables (Settings -> Secrets and
+# variables -> Actions -> Variables):
+#   GCP_PROJECT_ID, GCP_REGION (e.g. europe-west2), GCP_WIF_PROVIDER, GCP_DEPLOY_SA
+# and optionally HF_MODEL_REPO (default tingluzhang/airfrans-gnn), the public
+# Hugging Face model repo that export_serving.py --upload wrote.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # lets the job request the OIDC token that WIF trusts
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      REGION: ${{ vars.GCP_REGION }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/airfrans/airfrans-gnn
+      HF_MODEL_REPO: ${{ vars.HF_MODEL_REPO || 'tingluzhang/airfrans-gnn' }}
+    steps:
+      - name: Check the repository variables are set
+        run: |
+          for v in GCP_PROJECT_ID GCP_REGION GCP_WIF_PROVIDER GCP_DEPLOY_SA; do
+            [ -n "${!v}" ] || { echo "::error::Set the repository variable $v"; exit 1; }
+          done
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          GCP_DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build the image, with the artifacts baked in
+        # Baking them in means a cold start loads ~100 MB from the image instead
+        # of downloading it from the Hub every time an instance starts.
+        run: |
+          docker build -t airfrans-gnn .
+          pip install huggingface_hub==2.3.0
+          python -c "from huggingface_hub import snapshot_download as d; d('$HF_MODEL_REPO', local_dir='bake/artifacts')"
+          rm -rf bake/artifacts/.cache
+          printf 'FROM airfrans-gnn\nCOPY --chown=user artifacts /home/user/artifacts\n' \
+            | docker build -t "$IMAGE:$SHA" -f - bake
+      - name: Push it to Artifact Registry
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker push "$IMAGE:$SHA"
+      - name: Deploy the new revision
+        # min-instances 0: scales to zero when idle, so it costs nothing between
+        # visits (the first request after a while waits for a cold start).
+        # max-instances 2: caps the bill if someone hammers the endpoint.
+        run: |
+          gcloud run deploy airfrans-gnn \
+            --image "$IMAGE:$SHA" \
+            --region "$REGION" \
+            --port 7860 \
+            --cpu 1 --memory 2Gi --cpu-boost \
+            --concurrency 8 \
+            --min-instances 0 --max-instances 2 \
+            --set-env-vars TORCH_THREADS=1 \
+            --allow-unauthenticated \
+            --quiet
+          url=$(gcloud run services describe airfrans-gnn --region "$REGION" --format 'value(status.url)')
+          echo "Live at $url"
+          curl -sf --retry 5 --retry-delay 5 "$url/health"

@@ -191,6 +191,48 @@ penalty was not used in the final GNN for this reason.
   held-out split of the same shape family.
 
 
+## Deployment: live API on Google Cloud Run
+
+The k-NN GNN runs as a "what-if" API: pick one of 20 test airfoils, change the
+angle of attack or inflow speed, and get the predicted fields back. AirfRANS sets
+the angle of attack through the inflow direction rather than by rotating the
+airfoil, so the same mesh with new inlet features is a valid input. Inputs outside
+the training ranges (-5 to 15 degrees, Reynolds 2 to 6 million) are rejected.
+
+```
+GitHub (push / PR) ──► Actions CI: pytest, docker build, smoke test
+                            │ on main, if green
+                            ▼
+Hugging Face Hub ──► deploy.yml: image + artifacts ──► Artifact Registry
+model.pt, normaliser,                                        │
+20 test cases                                                ▼
+                     portfolio site ──► Cloud Run (FastAPI + GNN, scales to zero)
+                                        GET /cases, POST /predict, /docs
+```
+
+- `src/afrans/inference.py`: inference from plain arrays, so the API needs neither the
+  dataset nor the `airfrans` package. Training still goes through `build_graph`, which
+  shares `node_features()` and `knn_edges()` with it.
+- `scripts/export_serving.py`: run once where the checkpoint and dataset live; writes the
+  weights, normaliser and cases, checks the serving path against the evaluation path,
+  and with `--upload` pushes them to a Hugging Face model repo.
+- `serve/app.py`: FastAPI app; loads the model once at startup, caches each airfoil's
+  k-NN graph (it depends only on the mesh), validates inputs with Pydantic.
+- `Dockerfile`: CPU-only torch, runs as an unprivileged user on port 7860. Without
+  artifacts in the image it downloads them from the Hub at startup.
+- `.github/workflows/ci.yml`: tests plus a container smoke test on synthetic
+  artifacts, on every push and PR. `deploy.yml`: after CI passes on `main`, bakes the
+  Hub artifacts into the image, pushes it to Artifact Registry and deploys a new Cloud
+  Run revision (1 vCPU, 2 GiB, 0 to 2 instances). It signs in to Google Cloud through
+  Workload Identity Federation, so no key is stored in GitHub; it needs the repository
+  variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER` and `GCP_DEPLOY_SA`.
+
+```bash
+pip install -r serve/requirements.txt && pip install --no-deps -e .
+python scripts/export_serving.py --out serving_artifacts          # add --upload tingluzhang/airfrans-gnn
+ARTIFACT_DIR=serving_artifacts uvicorn serve.app:app --port 7860  # then open localhost:7860/docs
+```
+
 ## Quick start
 
 ```bash
@@ -236,6 +278,8 @@ airfrans-fno-gnn/
 │   ├── metrics.py           # point-space relative L2
 │   ├── engine.py            # train/val loops, checkpointing, both models
 │   ├── web_export.py        # cropping, sampling and binary encoding for the web explorer
+│   ├── inference.py         # GNN inference from arrays (what the API uses)
+│   ├── serving.py           # on-disk layout of the API's artifacts + a synthetic test fixture
 │   └── models/
 │       ├── fno.py
 │       └── gnn.py
@@ -245,7 +289,11 @@ airfrans-fno-gnn/
 │   ├── train_gnn.py         # train the GNN
 │   ├── evaluate.py          # FNO point-space evaluation
 │   ├── evaluate_gnn.py      # GNN point-space evaluation
-│   └── export_web.py        # test-set predictions -> static files for the portfolio explorer
+│   ├── export_web.py        # test-set predictions -> static files for the portfolio explorer
+│   └── export_serving.py    # weights + 20 test cases -> Hugging Face Hub, for the API
+├── serve/                   # FastAPI app and its pinned requirements
+├── Dockerfile               # the image Cloud Run runs
+├── .github/workflows/       # CI (tests + Docker smoke test) and deploy to Cloud Run
 ├── tests/                   # pytest -- covers several real bugs found during development
 ├── initial_investigation.ipynb   # first dataset exploration
 ├── fno_investigation.ipynb       # diagnosing the FNO's training-objective mismatch
